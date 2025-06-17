@@ -28,45 +28,37 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 📰 Обробка вибраної теми
 async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     topic_map = {
-        "🇺🇦 Україна": "україна",
-        "🌍 Світ": "world",
-        "💰 Економіка": "економіка",
-        "⚽️ Спорт": "спорт"
+        "🇺🇦 Україна": "general",
+        "🌍 Світ": "general",
+        "💰 Економіка": "business",
+        "⚽️ Спорт": "sports"
     }
 
     user_input = update.message.text
-    topic = topic_map.get(user_input, user_input)
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    category = topic_map.get(user_input, "general")
 
-    # Спроба 1: всеосяжний пошук
     params = {
-        "q": topic,
-        "language": "uk",
-        "from": today,
-        "sortBy": "publishedAt",
+        "country": "ua",
+        "category": category,
         "pageSize": 5,
         "apiKey": API_KEY
     }
 
-    response = requests.get("https://newsapi.org/v2/everything", params=params)
+    response = requests.get("https://newsapi.org/v2/top-headlines", params=params)
     data = response.json()
+
+    if data.get("status") != "ok":
+        await update.message.reply_text("⚠️ Помилка: не вдалося отримати новини.")
+        return
+
     articles = data.get("articles", [])
 
-    # Якщо нічого не знайдено — fallback до top-headlines
     if not articles:
-        fallback_params = {
-            "q": topic,
-            "language": "uk",
-            "pageSize": 5,
-            "apiKey": API_KEY
-        }
-        response = requests.get("https://newsapi.org/v2/top-headlines", params=fallback_params)
-        data = response.json()
-        articles = data.get("articles", [])
-
-    # Якщо після всього новин немає — попередження
-    if not articles:
-        await update.message.reply_text("😕 Свіжих новин на цю тему поки немає.")
+        await update.message.reply_text(
+            f"🔍 Наразі немає нових українських новин у категорії: <b>{category}</b>.\n"
+            "Це може бути пов’язано з тим, що в NewsAPI небагато українських джерел, або що новини ще не зʼявились у стрічці.",
+            parse_mode="HTML"
+        )
         return
 
     messages = []
@@ -76,14 +68,15 @@ async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
         source = article.get("source", {}).get("name", "")
         url = article.get("url", "")
 
-        if description and len(description) > 200:
-            description = description[:200] + "..."
+        if description and len(description) > 180:
+            description = description[:180] + "..."
 
         messages.append(
             f"🟦 <b>{title}</b> ({source})\n{description}\n{url}"
         )
 
     await update.message.reply_text("\n\n".join(messages), parse_mode="HTML")
+
 
 # 🚀 Запуск бота
 if __name__ == '__main__':
