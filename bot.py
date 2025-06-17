@@ -28,51 +28,48 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 📰 Обробка вибраної теми
 async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     topic_map = {
-        "🇺🇦 Україна": "general",
-        "🌍 Світ": "general",
+        "🇺🇦 Україна": "top",
+        "🌍 Світ": "world",
         "💰 Економіка": "business",
         "⚽️ Спорт": "sports"
     }
 
     user_input = update.message.text
-    category = topic_map.get(user_input, "general")
+    category = topic_map.get(user_input, "top")
 
+    url = "https://newsdata.io/api/1/news"
     params = {
+        "apikey": "pub_ea070273626e4ed59a1931fb4389ff27",
         "country": "ua",
+        "language": "uk",
         "category": category,
-        "pageSize": 5,
-        "apiKey": API_KEY
+        "page": 1
     }
 
-    response = requests.get("https://newsapi.org/v2/top-headlines", params=params)
+    response = requests.get(url, params=params)
     data = response.json()
-
-    if data.get("status") != "ok":
-        await update.message.reply_text("⚠️ Помилка: не вдалося отримати новини.")
-        return
-
-    articles = data.get("articles", [])
+    articles = data.get("results", [])
 
     if not articles:
         await update.message.reply_text(
-            f"🔍 Наразі немає нових українських новин у категорії: <b>{category}</b>.\n"
-            "Це може бути пов’язано з тим, що в NewsAPI небагато українських джерел, або що новини ще не зʼявились у стрічці.",
+            f"😶 Новин на тему <b>{category}</b> зараз не знайдено.\n"
+            "Можливо, джерела ще не оновили стрічку або дані недоступні.",
             parse_mode="HTML"
         )
         return
 
     messages = []
-    for article in articles:
+    for article in articles[:5]:
         title = article.get("title", "Без назви")
         description = article.get("description", "")
-        source = article.get("source", {}).get("name", "")
-        url = article.get("url", "")
+        source = article.get("source_id", "")
+        link = article.get("link", "")
 
-        if description and len(description) > 180:
-            description = description[:180] + "..."
+        if description and len(description) > 200:
+            description = description[:200] + "..."
 
         messages.append(
-            f"🟦 <b>{title}</b> ({source})\n{description}\n{url}"
+            f"🗞️ <b>{title}</b> ({source})\n{description}\n{link}"
         )
 
     await update.message.reply_text("\n\n".join(messages), parse_mode="HTML")
