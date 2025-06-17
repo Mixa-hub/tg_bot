@@ -26,8 +26,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # 📰 Обробка вибраної теми
-from datetime import datetime
-
 async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     topic_map = {
         "🇺🇦 Україна": "україна",
@@ -38,11 +36,9 @@ async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_input = update.message.text
     topic = topic_map.get(user_input, user_input)
+    today = datetime.utcnow().strftime("%Y-%m-%d")
 
-    # Формат дати для "сьогодні"
-    today = datetime.now().strftime("%Y-%m-%d")
-
-    # Запит до NewsAPI
+    # Спроба 1: всеосяжний пошук
     params = {
         "q": topic,
         "language": "uk",
@@ -52,16 +48,25 @@ async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "apiKey": API_KEY
     }
 
-    response = requests.get(NEWS_URL, params=params)
+    response = requests.get("https://newsapi.org/v2/everything", params=params)
     data = response.json()
-
-    if data.get("status") != "ok":
-        await update.message.reply_text("⚠️ Помилка при отриманні новин.")
-        return
-
     articles = data.get("articles", [])
+
+    # Якщо нічого не знайдено — fallback до top-headlines
     if not articles:
-        await update.message.reply_text("😐 Свіжих новин не знайдено.")
+        fallback_params = {
+            "q": topic,
+            "language": "uk",
+            "pageSize": 5,
+            "apiKey": API_KEY
+        }
+        response = requests.get("https://newsapi.org/v2/top-headlines", params=fallback_params)
+        data = response.json()
+        articles = data.get("articles", [])
+
+    # Якщо після всього новин немає — попередження
+    if not articles:
+        await update.message.reply_text("😕 Свіжих новин на цю тему поки немає.")
         return
 
     messages = []
@@ -71,21 +76,14 @@ async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
         source = article.get("source", {}).get("name", "")
         url = article.get("url", "")
 
-        # Обрізаємо опис, якщо він довгий
         if description and len(description) > 200:
             description = description[:200] + "..."
 
-        # Формат повідомлення
         messages.append(
-            f"🟦 <b>{title}</b> ({source})\n"
-            f"{description}\n"
-            f"{url}"
+            f"🟦 <b>{title}</b> ({source})\n{description}\n{url}"
         )
 
-    # Відправка всіх новин
     await update.message.reply_text("\n\n".join(messages), parse_mode="HTML")
-
-
 
 # 🚀 Запуск бота
 if __name__ == '__main__':
