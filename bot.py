@@ -26,6 +26,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # 📰 Обробка вибраної теми
+from datetime import datetime
+
 async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     topic_map = {
         "🇺🇦 Україна": "україна",
@@ -37,7 +39,10 @@ async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text
     topic = topic_map.get(user_input, user_input)
 
+    # Формат дати для "сьогодні"
     today = datetime.now().strftime("%Y-%m-%d")
+
+    # Запит до NewsAPI
     params = {
         "q": topic,
         "language": "uk",
@@ -51,12 +56,12 @@ async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = response.json()
 
     if data.get("status") != "ok":
-        await update.message.reply_text("❌ Не вдалося отримати новини.")
+        await update.message.reply_text("⚠️ Помилка при отриманні новин.")
         return
 
     articles = data.get("articles", [])
     if not articles:
-        await update.message.reply_text("Свіжих новин не знайдено 😕")
+        await update.message.reply_text("😐 Свіжих новин не знайдено.")
         return
 
     messages = []
@@ -66,15 +71,18 @@ async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
         source = article.get("source", {}).get("name", "")
         url = article.get("url", "")
 
-        if description and len(description) > 180:
-            description = description[:180] + "..."
+        # Обрізаємо опис, якщо він довгий
+        if description and len(description) > 200:
+            description = description[:200] + "..."
 
+        # Формат повідомлення
         messages.append(
             f"🟦 <b>{title}</b> ({source})\n"
             f"{description}\n"
             f"{url}"
         )
 
+    # Відправка всіх новин
     await update.message.reply_text("\n\n".join(messages), parse_mode="HTML")
 
 
