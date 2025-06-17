@@ -28,51 +28,74 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 📰 Обробка вибраної теми
 async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     topic_map = {
-        "🇺🇦 Україна": "top",
-        "🌍 Світ": "world",
-        "💰 Економіка": "business",
-        "⚽️ Спорт": "sports"
+        "🇺🇦 Україна": {"category": "top", "keywords": "війна україни"},
+        "🌍 Світ": {"category": "world", "keywords": ""},
+        "💰 Економіка": {"category": "business", "keywords": ""},
+        "⚽️ Спорт": {"category": "sports", "keywords": "футбол OR бокс OR україна"}
     }
 
     user_input = update.message.text
-    category = topic_map.get(user_input, "top")
+    if user_input == "🔁 Показати ще":
+        topic = context.user_data.get("last_topic")
+        page = context.user_data.get("page", 1) + 1
+    else:
+        topic = user_input
+        page = 1
+
+    context.user_data["last_topic"] = topic
+    context.user_data["page"] = page
+
+    info = topic_map.get(topic)
+    if not info:
+        await update.message.reply_text("😕 Невідома тема.")
+        return
 
     url = "https://newsdata.io/api/1/news"
     params = {
         "apikey": "pub_ea070273626e4ed59a1931fb4389ff27",
         "country": "ua",
         "language": "uk",
-        "category": category,
-        "page": 1
+        "category": info["category"],
+        "q": info["keywords"],
+        "page": page
     }
 
-    response = requests.get(url, params=params)
-    data = response.json()
-    articles = data.get("results", [])
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+    except Exception:
+        await update.message.reply_text("⚠️ Неможливо з'єднатись із News API.")
+        return
 
-    if not articles:
-        await update.message.reply_text(
-            f"😶 Новин на тему <b>{category}</b> зараз не знайдено.\n"
-            "Можливо, джерела ще не оновили стрічку або дані недоступні.",
-            parse_mode="HTML"
-        )
+    results = data.get("results")
+    if not isinstance(results, list) or not results:
+        await update.message.reply_text("🔇 Новини за цією темою закінчились або тимчасово недоступні.")
         return
 
     messages = []
-    for article in articles[:5]:
+    for article in results[:5]:
         title = article.get("title", "Без назви")
-        description = article.get("description", "")
-        source = article.get("source_id", "")
+        desc = article.get("description", "")
+        source = article.get("source_id", "джерело")
         link = article.get("link", "")
 
-        if description and len(description) > 200:
-            description = description[:200] + "..."
+        if desc and len(desc) > 200:
+            desc = desc[:200] + "..."
 
         messages.append(
-            f"🗞️ <b>{title}</b> ({source})\n{description}\n{link}"
+            f"🗞️ <b>{title}</b> ({source})\n{desc}\n{link}"
         )
 
+    # Відправка новин
     await update.message.reply_text("\n\n".join(messages), parse_mode="HTML")
+
+    # Додаємо кнопку “Показати ще”
+    reply_markup = ReplyKeyboardMarkup(
+        [["🔁 Показати ще"] + list(topic_map.keys())],
+        resize_keyboard=True
+    )
+    await update.message.reply_text("⬅ Обери ще тему або натисни “🔁 Показати ще”", reply_markup=reply_markup)
+
 
 
 # 🚀 Запуск бота
