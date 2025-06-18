@@ -50,30 +50,33 @@ async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("😕 Невідома тема.")
         return
 
-    url = "https://newsdata.io/api/1/news"
-    params = {
-        "apikey": "pub_ea070273626e4ed59a1931fb4389ff27",
-        "country": "ua",
-        "language": "uk",
-        "category": info["category"],
-        "q": info["keywords"],
-        "page": page
-    }
+    def fetch_news(lang):
+        url = "https://newsdata.io/api/1/news"
+        params = {
+            "apikey": "pub_ea070273626e4ed59a1931fb4389ff27",
+            "country": "ua",
+            "language": lang,
+            "category": info["category"],
+            "q": info["keywords"],
+            "page": page
+        }
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            return response.json().get("results", [])
+        except:
+            return []
 
-    try:
-        response = requests.get(url, params=params, timeout=10)
-        data = response.json()
-    except Exception:
-        await update.message.reply_text("⚠️ Неможливо з'єднатись із News API.")
-        return
+    articles = fetch_news("uk") or fetch_news("en")
 
-    results = data.get("results")
-    if not isinstance(results, list) or not results:
-        await update.message.reply_text("🔇 Новини за цією темою закінчились або тимчасово недоступні.")
+    if not isinstance(articles, list) or not articles:
+        await update.message.reply_text(
+            "🔇 Новини за цією темою тимчасово недоступні.\n"
+            "Можливо, джерела ще не оновили стрічку або API повернув порожню відповідь."
+        )
         return
 
     messages = []
-    for article in results[:5]:
+    for article in articles[:5]:
         title = article.get("title", "Без назви")
         desc = article.get("description", "")
         source = article.get("source_id", "джерело")
@@ -82,20 +85,15 @@ async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if desc and len(desc) > 200:
             desc = desc[:200] + "..."
 
-        messages.append(
-            f"🗞️ <b>{title}</b> ({source})\n{desc}\n{link}"
-        )
+        messages.append(f"🗞️ <b>{title}</b> ({source})\n{desc}\n{link}")
 
-    # Відправка новин
-    await update.message.reply_text("\n\n".join(messages), parse_mode="HTML")
-
-    # Додаємо кнопку “Показати ще”
     reply_markup = ReplyKeyboardMarkup(
         [["🔁 Показати ще"] + list(topic_map.keys())],
         resize_keyboard=True
     )
-    await update.message.reply_text("⬅ Обери ще тему або натисни “🔁 Показати ще”", reply_markup=reply_markup)
 
+    await update.message.reply_text("\n\n".join(messages), parse_mode="HTML")
+    await update.message.reply_text("⬅ Обери ще тему або натисни “🔁 Показати ще”", reply_markup=reply_markup)
 
 
 # 🚀 Запуск бота
