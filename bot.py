@@ -44,13 +44,18 @@ def get_rss_news(keywords):
             source = feed.feed.get("title", "джерело")
 
             text = f"{title} {summary}".lower()
-            if any(word in text for word in keywords):
+            # if any(word in text for word in keywords):
+            # ТИМЧАСОВО — показати все
+            if True:
                 results.append({
                     "title": title.strip(),
                     "summary": summary.strip()[:200] + "...",
                     "link": link,
                     "source": source.strip()
                 })
+    print(f"🧪 Парсинг завершено. Знайдено {len(results)} новин:")
+    for r in results:
+        print(f"  - {r['title']}")
 
     return results[:5]
 
