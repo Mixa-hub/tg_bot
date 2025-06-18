@@ -28,64 +28,58 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 📰 Обробка вибраної теми
 async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     topic_map = {
-        "🇺🇦 Україна": {"category": "top", "keywords": "війна україни"},
-        "🌍 Світ": {"category": "world", "keywords": ""},
-        "💰 Економіка": {"category": "business", "keywords": ""},
-        "⚽️ Спорт": {"category": "sports", "keywords": "футбол OR бокс OR україна"}
+        "🇺🇦 Україна": "ukraine war",
+        "🌍 Світ": "world news",
+        "💰 Економіка": "economy",
+        "⚽️ Спорт": "football OR boxing OR україна"
     }
 
     user_input = update.message.text
     if user_input == "🔁 Показати ще":
-        topic = context.user_data.get("last_topic")
+        query = context.user_data.get("last_query", "ukraine")
         page = context.user_data.get("page", 1) + 1
     else:
-        topic = user_input
+        query = topic_map.get(user_input, "ukraine")
         page = 1
 
-    context.user_data["last_topic"] = topic
+    context.user_data["last_query"] = query
     context.user_data["page"] = page
 
-    info = topic_map.get(topic)
-    if not info:
-        await update.message.reply_text("😕 Невідома тема.")
+    url = "https://gnews.io/api/v4/search"
+    params = {
+        "q": query,
+        "lang": "uk",
+        "country": "ua",
+        "max": 5,
+        "page": page,
+        "token": "ed8046caba3e55eec04826c52b330a3a"
+    }
+
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+        articles = data.get("articles", [])
+    except Exception:
+        await update.message.reply_text("⚠️ Помилка з'єднання з GNews API.")
         return
 
-    def fetch_news(lang):
-        url = "https://newsdata.io/api/1/news"
-        params = {
-            "apikey": "pub_ea070273626e4ed59a1931fb4389ff27",
-            "country": "ua",
-            "language": lang,
-            "category": info["category"],
-            "q": info["keywords"],
-            "page": page
-        }
-        try:
-            response = requests.get(url, params=params, timeout=10)
-            return response.json().get("results", [])
-        except:
-            return []
-
-    articles = fetch_news("uk") or fetch_news("en")
-
-    if not isinstance(articles, list) or not articles:
+    if not articles:
         await update.message.reply_text(
-            "🔇 Новини за цією темою тимчасово недоступні.\n"
-            "Можливо, джерела ще не оновили стрічку або API повернув порожню відповідь."
+            "🔇 Новини тимчасово недоступні або ще не зʼявились у стрічці. Спробуй пізніше або обери іншу тему."
         )
         return
 
     messages = []
-    for article in articles[:5]:
+    for article in articles:
         title = article.get("title", "Без назви")
         desc = article.get("description", "")
-        source = article.get("source_id", "джерело")
-        link = article.get("link", "")
+        source = article.get("source", {}).get("name", "")
+        url = article.get("url", "")
 
         if desc and len(desc) > 200:
             desc = desc[:200] + "..."
 
-        messages.append(f"🗞️ <b>{title}</b> ({source})\n{desc}\n{link}")
+        messages.append(f"🗞️ <b>{title}</b> ({source})\n{desc}\n{url}")
 
     reply_markup = ReplyKeyboardMarkup(
         [["🔁 Показати ще"] + list(topic_map.keys())],
