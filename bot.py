@@ -1,6 +1,5 @@
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
-import requests
 from datetime import datetime
 import feedparser
 
@@ -27,7 +26,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Натисни на одну з кнопок або введи тему вручну 📰"
     )
 
+last_keywords = {}  # Глобальний словник для збереження останнього запиту
+
 def get_rss_news(keywords):
+    import feedparser
+
     feeds = [
         "https://www.pravda.com.ua/rss/",
         "https://kyivindependent.com/news-archive/feed",
@@ -43,30 +46,62 @@ def get_rss_news(keywords):
             link = entry.get("link", "")
             source = feed.feed.get("title", "джерело")
 
-            text = f"{title} {summary}".lower()
-            # if any(word in text for word in keywords):
-            # ТИМЧАСОВО — показати все
-            if True:
+            if any(kw.lower() in title.lower() for kw in keywords):
                 results.append({
                     "title": title.strip(),
                     "summary": summary.strip()[:200] + "...",
                     "link": link,
                     "source": source.strip()
                 })
-    print(f"🧪 Парсинг завершено. Знайдено {len(results)} новин:")
-    for r in results:
-        print(f"  - {r['title']}")
 
     return results[:5]
 
-
-# 📰 Обробка вибраної теми
 async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keywords = ["футбол", "бокс", "війна"]
+    topic_map = {
+        "🇺🇦 Україна": ["війна", "київ", "дрон"],
+        "🌍 Світ": ["g7", "ізраїль", "польща"],
+        "💰 Економіка": ["економіка", "гривня", "ціна", "інфляція"],
+        "⚽️ Спорт": ["футбол", "бокс", "олімпіада"],
+        "🔁 Показати ще": None
+    }
+
+    user_input = update.message.text
+
+    if user_input == "🔁 Показати ще":
+        keywords = last_keywords.get(update.effective_chat.id, ["війна"])
+    else:
+        keywords = topic_map.get(user_input, ["війна"])
+        last_keywords[update.effective_chat.id] = keywords
+
     news = get_rss_news(keywords)
 
     if not news:
-        await update.message.reply_text("🔇 Новини за ключовими словами не знайдено. Спробуй пізніше.")
+        await update.message.reply_text("🔇 Жодної новини не знайдено. Спробуй пізніше або обери іншу тему.")
+        return
+
+    messages = []
+    for item in news:
+        messages.append(
+            f"🗞️ <b>{item['title']}</b> ({item['source']})\n"
+            f"{item['summary']}\n{item['link']}"
+        )
+
+    keyboard = [["🔁 Показати ще"], ["🇺🇦 Україна", "🌍 Світ"], ["💰 Економіка", "⚽️ Спорт"]]
+    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+    await update.message.reply_text("\n\n".join(messages), parse_mode="HTML", reply_markup=markup)
+
+# 🆕 Хендлер команди /rss
+async def rss_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("❓ Вкажи тему, наприклад: /rss футбол")
+        return
+    keywords = context.args
+    last_keywords[update.effective_chat.id] = keywords
+    news = get_rss_news(keywords)
+
+    if not news:
+        await update.message.reply_text("🔇 Новин за цією темою не знайдено.")
         return
 
     messages = []
@@ -86,6 +121,8 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_topic))
+    app.add_handler(CommandHandler("rss", rss_command))
+
 
     print("Бот запущений!")
     app.run_polling()
