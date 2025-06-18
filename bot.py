@@ -2,10 +2,12 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 import requests
 from datetime import datetime
+import feedparser
 
-# 🔐 API ключ від NewsAPI
-API_KEY = "94601de32797445c8e6b199554b68a81"
-NEWS_URL = "https://newsapi.org/v2/everything"
+
+# # 🔐 API ключ від NewsAPI
+# API_KEY = "94601de32797445c8e6b199554b68a81"
+# NEWS_URL = "https://newsapi.org/v2/everything"
 
 # 📘 /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -25,69 +27,51 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Натисни на одну з кнопок або введи тему вручну 📰"
     )
 
+def get_rss_news(keywords):
+    feeds = [
+        "https://www.pravda.com.ua/rss/",
+        "https://kyivindependent.com/news-archive/feed",
+        "https://euromaidanpress.com/feed"
+    ]
+
+    results = []
+    for url in feeds:
+        feed = feedparser.parse(url)
+        for entry in feed.entries:
+            title = entry.get("title", "")
+            summary = entry.get("summary", "")
+            link = entry.get("link", "")
+            source = feed.feed.get("title", "джерело")
+
+            text = f"{title} {summary}".lower()
+            if any(word in text for word in keywords):
+                results.append({
+                    "title": title.strip(),
+                    "summary": summary.strip()[:200] + "...",
+                    "link": link,
+                    "source": source.strip()
+                })
+
+    return results[:5]
+
+
 # 📰 Обробка вибраної теми
 async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    topic_map = {
-        "🇺🇦 Україна": "ukraine war",
-        "🌍 Світ": "world news",
-        "💰 Економіка": "economy",
-        "⚽️ Спорт": "football OR boxing OR україна"
-    }
+    keywords = ["футбол", "бокс", "війна"]
+    news = get_rss_news(keywords)
 
-    user_input = update.message.text
-    if user_input == "🔁 Показати ще":
-        query = context.user_data.get("last_query", "ukraine")
-        page = context.user_data.get("page", 1) + 1
-    else:
-        query = topic_map.get(user_input, "ukraine")
-        page = 1
-
-    context.user_data["last_query"] = query
-    context.user_data["page"] = page
-
-    url = "https://gnews.io/api/v4/search"
-    params = {
-        "q": query,
-        "lang": "uk",
-        "country": "ua",
-        "max": 5,
-        "page": page,
-        "token": "ed8046caba3e55eec04826c52b330a3a"
-    }
-
-    try:
-        response = requests.get(url, params=params, timeout=10)
-        data = response.json()
-        articles = data.get("articles", [])
-    except Exception:
-        await update.message.reply_text("⚠️ Помилка з'єднання з GNews API.")
-        return
-
-    if not articles:
-        await update.message.reply_text(
-            "🔇 Новини тимчасово недоступні або ще не зʼявились у стрічці. Спробуй пізніше або обери іншу тему."
-        )
+    if not news:
+        await update.message.reply_text("🔇 Новини за ключовими словами не знайдено. Спробуй пізніше.")
         return
 
     messages = []
-    for article in articles:
-        title = article.get("title", "Без назви")
-        desc = article.get("description", "")
-        source = article.get("source", {}).get("name", "")
-        url = article.get("url", "")
-
-        if desc and len(desc) > 200:
-            desc = desc[:200] + "..."
-
-        messages.append(f"🗞️ <b>{title}</b> ({source})\n{desc}\n{url}")
-
-    reply_markup = ReplyKeyboardMarkup(
-        [["🔁 Показати ще"] + list(topic_map.keys())],
-        resize_keyboard=True
-    )
+    for item in news:
+        messages.append(
+            f"🗞️ <b>{item['title']}</b> ({item['source']})\n"
+            f"{item['summary']}\n{item['link']}"
+        )
 
     await update.message.reply_text("\n\n".join(messages), parse_mode="HTML")
-    await update.message.reply_text("⬅ Обери ще тему або натисни “🔁 Показати ще”", reply_markup=reply_markup)
 
 
 # 🚀 Запуск бота
